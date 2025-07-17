@@ -1,0 +1,730 @@
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Système d'Évaluation Financière</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cal+Sans:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Cal Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .matrix-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            animation: gradient 15s ease infinite;
+        }
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .glass-card {
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .floating {
+            animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+    </style>
+</head>
+<body class="min-h-screen matrix-bg">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Utilitaires
+        const formatNumber = (num) => new Intl.NumberFormat('fr-FR').format(num);
+        const formatCurrency = (num) => new Intl.NumberFormat('fr-FR', {
+            style: 'currency',
+            currency: 'EUR'
+        }).format(num);
+
+        // Calcul du score
+        const calculateScore = (profile) => {
+            return (profile.revenus * 0.5 + 
+                   profile.actifs * 0.7 + 
+                   profile.investissements * 1.2) - profile.dettes * 0.9;
+        };
+
+        // Stockage local
+        const saveData = (data) => {
+            localStorage.setItem('wealthscan_data', JSON.stringify(data));
+        };
+
+        const loadData = () => {
+            const data = localStorage.getItem('wealthscan_data');
+            return data ? JSON.parse(data) : [];
+        };
+
+        // Composant Principal
+        const WealthScan = () => {
+            const [profiles, setProfiles] = useState([]);
+            const [currentView, setCurrentView] = useState('home');
+            const [selectedProfile, setSelectedProfile] = useState(null);
+            const [showShareModal, setShowShareModal] = useState(false);
+
+            useEffect(() => {
+                setProfiles(loadData());
+            }, []);
+
+            const addProfile = (profile) => {
+                const newProfiles = [...profiles, profile];
+                setProfiles(newProfiles);
+                saveData(newProfiles);
+            };
+
+            const getSortedProfiles = () => {
+                return profiles.map(profile => ({
+                    ...profile,
+                    score: calculateScore(profile)
+                })).sort((a, b) => b.score - a.score);
+            };
+
+            const getProfileRank = (profileName) => {
+                const sorted = getSortedProfiles();
+                return sorted.findIndex(p => p.nom.toLowerCase() === profileName.toLowerCase()) + 1;
+            };
+
+            const shareProfile = (profile) => {
+                const rank = getProfileRank(profile.nom);
+                const message = `🏆 Découvrez WealthScan ! 
+                
+${profile.nom} est classé ${rank}/${profiles.length} avec un score de ${formatNumber(profile.score)} points !
+
+📊 Évaluez votre profil financier gratuitement sur: 
+${window.location.href}
+
+#WealthScan #Finance #Investissement`;
+
+                if (navigator.share) {
+                    navigator.share({
+                        title: 'WealthScan - Mon Évaluation Financière',
+                        text: message,
+                        url: window.location.href
+                    });
+                } else {
+                    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+                    window.open(whatsappUrl, '_blank');
+                }
+            };
+
+            return (
+                <div className="min-h-screen">
+                    {/* Header */}
+                    <header className="glass-card p-6 m-4 rounded-3xl">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
+                                <div className="w-12 h-12 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-2xl flex items-center justify-center floating">
+                                    <i className="fas fa-bolt text-white text-xl"></i>
+                                </div>
+                                <div>
+                                    <h1 className="text-2xl font-bold text-white">WealthScan</h1>
+                                    <p className="text-blue-100">Système d'Évaluation Financière</p>
+                                </div>
+                            </div>
+                            <div className="text-right text-white">
+                                <div className="text-sm opacity-80">Total Profils</div>
+                                <div className="text-2xl font-bold">{profiles.length}</div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Navigation */}
+                    <nav className="glass-card p-4 m-4 rounded-3xl">
+                        <div className="flex space-x-4 overflow-x-auto">
+                            <NavButton 
+                                active={currentView === 'home'} 
+                                onClick={() => setCurrentView('home')}
+                                icon="fas fa-home"
+                                text="Accueil"
+                            />
+                            <NavButton 
+                                active={currentView === 'add'} 
+                                onClick={() => setCurrentView('add')}
+                                icon="fas fa-plus"
+                                text="Nouveau Profil"
+                            />
+                            <NavButton 
+                                active={currentView === 'ranking'} 
+                                onClick={() => setCurrentView('ranking')}
+                                icon="fas fa-trophy"
+                                text="Classement"
+                            />
+                            <NavButton 
+                                active={currentView === 'search'} 
+                                onClick={() => setCurrentView('search')}
+                                icon="fas fa-search"
+                                text="Rechercher"
+                            />
+                        </div>
+                    </nav>
+
+                    {/* Contenu principal */}
+                    <main className="p-4">
+                        {currentView === 'home' && <HomeView profiles={profiles} onViewChange={setCurrentView} />}
+                        {currentView === 'add' && <AddProfileView onAdd={addProfile} onViewChange={setCurrentView} />}
+                        {currentView === 'ranking' && <RankingView profiles={getSortedProfiles()} onShare={shareProfile} />}
+                        {currentView === 'search' && <SearchView profiles={getSortedProfiles()} onSelectProfile={setSelectedProfile} onShare={shareProfile} />}
+                    </main>
+
+                    {/* Modal de partage */}
+                    {showShareModal && (
+                        <ShareModal 
+                            profile={selectedProfile} 
+                            onClose={() => setShowShareModal(false)} 
+                            onShare={shareProfile}
+                        />
+                    )}
+                </div>
+            );
+        };
+
+        // Composant Bouton de Navigation
+        const NavButton = ({ active, onClick, icon, text }) => (
+            <button
+                onClick={onClick}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-2xl transition-all duration-300 ${
+                    active 
+                        ? 'bg-white text-purple-600 shadow-lg' 
+                        : 'text-white hover:bg-white/10'
+                }`}
+            >
+                <i className={icon}></i>
+                <span className="whitespace-nowrap">{text}</span>
+            </button>
+        );
+
+        // Vue d'accueil
+        const HomeView = ({ profiles, onViewChange }) => {
+            const topProfiles = profiles
+                .map(p => ({ ...p, score: calculateScore(p) }))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 3);
+
+            return (
+                <div className="space-y-6">
+                    {/* Statistiques */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <StatCard 
+                            title="Total Profils" 
+                            value={profiles.length} 
+                            icon="fas fa-users"
+                            color="from-blue-500 to-purple-600"
+                        />
+                        <StatCard 
+                            title="Richesse Moyenne" 
+                            value={profiles.length > 0 ? formatCurrency(profiles.reduce((sum, p) => sum + calculateScore(p), 0) / profiles.length) : "0 €"}
+                            icon="fas fa-chart-line"
+                            color="from-green-500 to-teal-600"
+                        />
+                        <StatCard 
+                            title="Top Score" 
+                            value={topProfiles.length > 0 ? formatNumber(topProfiles[0].score) : "0"}
+                            icon="fas fa-crown"
+                            color="from-yellow-500 to-orange-600"
+                        />
+                    </div>
+
+                    {/* Podium */}
+                    {topProfiles.length > 0 && (
+                        <div className="glass-card p-6 rounded-3xl">
+                            <h2 className="text-2xl font-bold text-white mb-6 flex items-center">
+                                <i className="fas fa-trophy text-yellow-400 mr-3"></i>
+                                Podium des Leaders
+                            </h2>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {topProfiles.map((profile, index) => (
+                                    <PodiumCard key={profile.nom} profile={profile} rank={index + 1} />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Actions rapides */}
+                    <div className="glass-card p-6 rounded-3xl">
+                        <h2 className="text-2xl font-bold text-white mb-6">Actions Rapides</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <ActionCard 
+                                title="Créer un Profil"
+                                description="Ajoutez votre profil financier et obtenez votre score"
+                                icon="fas fa-plus-circle"
+                                color="from-green-500 to-emerald-600"
+                                onClick={() => onViewChange('add')}
+                            />
+                            <ActionCard 
+                                title="Voir le Classement"
+                                description="Découvrez qui domine le classement financier"
+                                icon="fas fa-list-ol"
+                                color="from-purple-500 to-pink-600"
+                                onClick={() => onViewChange('ranking')}
+                            />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Composant Carte de Statistique
+        const StatCard = ({ title, value, icon, color }) => (
+            <div className={`glass-card p-6 rounded-3xl bg-gradient-to-r ${color} bg-opacity-20`}>
+                <div className="flex items-center justify-between">
+                    <div>
+                        <p className="text-white opacity-80 text-sm">{title}</p>
+                        <p className="text-2xl font-bold text-white">{value}</p>
+                    </div>
+                    <i className={`${icon} text-3xl text-white opacity-80`}></i>
+                </div>
+            </div>
+        );
+
+        // Composant Carte de Podium
+        const PodiumCard = ({ profile, rank }) => {
+            const colors = {
+                1: 'from-yellow-400 to-yellow-600',
+                2: 'from-gray-300 to-gray-500',
+                3: 'from-orange-400 to-orange-600'
+            };
+
+            const icons = {
+                1: 'fas fa-crown',
+                2: 'fas fa-medal',
+                3: 'fas fa-award'
+            };
+
+            return (
+                <div className={`glass-card p-6 rounded-3xl bg-gradient-to-r ${colors[rank]} bg-opacity-20 transform hover:scale-105 transition-transform`}>
+                    <div className="text-center">
+                        <i className={`${icons[rank]} text-4xl text-white mb-3`}></i>
+                        <h3 className="text-xl font-bold text-white">{profile.nom}</h3>
+                        <p className="text-white opacity-80">#{rank}</p>
+                        <p className="text-2xl font-bold text-white mt-2">{formatNumber(profile.score)}</p>
+                        <p className="text-white opacity-60 text-sm">points</p>
+                    </div>
+                </div>
+            );
+        };
+
+        // Composant Carte d'Action
+        const ActionCard = ({ title, description, icon, color, onClick }) => (
+            <button
+                onClick={onClick}
+                className={`glass-card p-6 rounded-3xl bg-gradient-to-r ${color} bg-opacity-20 hover:bg-opacity-30 transform hover:scale-105 transition-all text-left`}
+            >
+                <i className={`${icon} text-3xl text-white mb-4`}></i>
+                <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
+                <p className="text-white opacity-80">{description}</p>
+            </button>
+        );
+
+        // Vue d'ajout de profil
+        const AddProfileView = ({ onAdd, onViewChange }) => {
+            const [formData, setFormData] = useState({
+                nom: '',
+                revenus: '',
+                actifs: '',
+                dettes: '',
+                investissements: ''
+            });
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                const profile = {
+                    nom: formData.nom,
+                    revenus: parseInt(formData.revenus) || 0,
+                    actifs: parseInt(formData.actifs) || 0,
+                    dettes: parseInt(formData.dettes) || 0,
+                    investissements: parseInt(formData.investissements) || 0
+                };
+                onAdd(profile);
+                setFormData({
+                    nom: '',
+                    revenus: '',
+                    actifs: '',
+                    dettes: '',
+                    investissements: ''
+                });
+                onViewChange('home');
+            };
+
+            return (
+                <div className="max-w-2xl mx-auto">
+                    <div className="glass-card p-8 rounded-3xl">
+                        <h2 className="text-3xl font-bold text-white mb-8 text-center">
+                            <i className="fas fa-user-plus text-green-400 mr-3"></i>
+                            Nouveau Profil Financier
+                        </h2>
+                        
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            <InputField
+                                label="Nom complet"
+                                type="text"
+                                value={formData.nom}
+                                onChange={(e) => setFormData({...formData, nom: e.target.value})}
+                                icon="fas fa-user"
+                                required
+                            />
+                            
+                            <InputField
+                                label="Revenus annuels (€)"
+                                type="number"
+                                value={formData.revenus}
+                                onChange={(e) => setFormData({...formData, revenus: e.target.value})}
+                                icon="fas fa-euro-sign"
+                                required
+                            />
+                            
+                            <InputField
+                                label="Actifs totaux (€)"
+                                type="number"
+                                value={formData.actifs}
+                                onChange={(e) => setFormData({...formData, actifs: e.target.value})}
+                                icon="fas fa-building"
+                                required
+                            />
+                            
+                            <InputField
+                                label="Dettes totales (€)"
+                                type="number"
+                                value={formData.dettes}
+                                onChange={(e) => setFormData({...formData, dettes: e.target.value})}
+                                icon="fas fa-credit-card"
+                                required
+                            />
+                            
+                            <InputField
+                                label="Investissements actifs (€)"
+                                type="number"
+                                value={formData.investissements}
+                                onChange={(e) => setFormData({...formData, investissements: e.target.value})}
+                                icon="fas fa-chart-line"
+                                required
+                            />
+                            
+                            <button
+                                type="submit"
+                                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-4 px-6 rounded-2xl hover:from-green-600 hover:to-emerald-700 transform hover:scale-105 transition-all duration-300 shadow-lg"
+                            >
+                                <i className="fas fa-save mr-2"></i>
+                                Créer le Profil
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        // Composant Champ de Saisie
+        const InputField = ({ label, type, value, onChange, icon, required }) => (
+            <div>
+                <label className="block text-white text-sm font-medium mb-2">{label}</label>
+                <div className="relative">
+                    <i className={`${icon} absolute left-4 top-4 text-gray-400`}></i>
+                    <input
+                        type={type}
+                        value={value}
+                        onChange={onChange}
+                        required={required}
+                        className="w-full pl-12 pr-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        placeholder={`Entrez ${label.toLowerCase()}`}
+                    />
+                </div>
+            </div>
+        );
+
+        // Vue de classement
+        const RankingView = ({ profiles, onShare }) => (
+            <div className="glass-card p-6 rounded-3xl">
+                <h2 className="text-3xl font-bold text-white mb-8 text-center">
+                    <i className="fas fa-trophy text-yellow-400 mr-3"></i>
+                    Classement des Financiers
+                </h2>
+                
+                <div className="space-y-4">
+                    {profiles.map((profile, index) => (
+                        <ProfileCard 
+                            key={profile.nom} 
+                            profile={profile} 
+                            rank={index + 1}
+                            onShare={() => onShare(profile)}
+                        />
+                    ))}
+                </div>
+            </div>
+        );
+
+        // Composant Carte de Profil
+        const ProfileCard = ({ profile, rank, onShare }) => {
+            const getRankIcon = (rank) => {
+                if (rank === 1) return 'fas fa-crown text-yellow-400';
+                if (rank <= 3) return 'fas fa-medal text-gray-300';
+                if (rank <= 5) return 'fas fa-award text-orange-400';
+                return 'fas fa-user text-blue-400';
+            };
+
+            return (
+                <div className="glass-card p-6 rounded-3xl hover:bg-white/10 transition-all transform hover:scale-105">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                            <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center">
+                                <i className={getRankIcon(rank)}></i>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">{profile.nom}</h3>
+                                <p className="text-blue-200">Rang #{rank}</p>
+                            </div>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-2xl font-bold text-white">{formatNumber(profile.score)}</p>
+                            <p className="text-blue-200 text-sm">points</p>
+                        </div>
+                        <button
+                            onClick={onShare}
+                            className="ml-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 py-2 rounded-2xl hover:from-blue-600 hover:to-purple-700 transition-all"
+                        >
+                            <i className="fas fa-share-alt"></i>
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // Vue de recherche
+        const SearchView = ({ profiles, onSelectProfile, onShare }) => {
+            const [searchTerm, setSearchTerm] = useState('');
+            const [selectedProfile, setSelectedProfile] = useState(null);
+
+            const filteredProfiles = profiles.filter(profile =>
+                profile.nom.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+
+            const handleProfileSelect = (profile) => {
+                setSelectedProfile(profile);
+                onSelectProfile(profile);
+            };
+
+            return (
+                <div className="space-y-6">
+                    <div className="glass-card p-6 rounded-3xl">
+                        <h2 className="text-2xl font-bold text-white mb-4">
+                            <i className="fas fa-search text-blue-400 mr-3"></i>
+                            Rechercher un Profil
+                        </h2>
+                        <div className="relative">
+                            <i className="fas fa-search absolute left-4 top-4 text-gray-400"></i>
+                            <input
+                                type="text"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                placeholder="Tapez le nom à rechercher..."
+                                className="w-full pl-12 pr-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            />
+                        </div>
+                    </div>
+
+                    {searchTerm && (
+                        <div className="space-y-4">
+                            {filteredProfiles.map((profile, index) => (
+                                <button
+                                    key={profile.nom}
+                                    onClick={() => handleProfileSelect(profile)}
+                                    className="w-full glass-card p-6 rounded-3xl hover:bg-white/10 transition-all transform hover:scale-105 text-left"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-4">
+                                            <div className="w-12 h-12 bg-gradient-to-r from-green-500 to-blue-500 rounded-2xl flex items-center justify-center">
+                                                <i className="fas fa-user text-white"></i>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-bold text-white">{profile.nom}</h3>
+                                                <p className="text-blue-200">Score: {formatNumber(profile.score)} points</p>
+                                            </div>
+                                        </div>
+                                        <i className="fas fa-chevron-right text-white"></i>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {selectedProfile && (
+                        <ProfileDetails profile={selectedProfile} onShare={() => onShare(selectedProfile)} />
+                    )}
+                </div>
+            );
+        };
+
+        // Composant Détails du Profil
+        const ProfileDetails = ({ profile, onShare }) => {
+            const chartRef = useRef(null);
+
+            useEffect(() => {
+                if (chartRef.current) {
+                    const ctx = chartRef.current.getContext('2d');
+                    new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Revenus', 'Actifs', 'Investissements', 'Dettes'],
+                            datasets: [{
+                                data: [profile.revenus, profile.actifs, profile.investissements, -profile.dettes],
+                                backgroundColor: [
+                                    'rgba(76, 175, 80, 0.8)',
+                                    'rgba(33, 150, 243, 0.8)',
+                                    'rgba(156, 39, 176, 0.8)',
+                                    'rgba(244, 67, 54, 0.8)'
+                                ],
+                                borderColor: [
+                                    'rgba(76, 175, 80, 1)',
+                                    'rgba(33, 150, 243, 1)',
+                                    'rgba(156, 39, 176, 1)',
+                                    'rgba(244, 67, 54, 1)'
+                                ],
+                                borderWidth: 2,
+                                borderRadius: 10
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        color: 'white',
+                                        callback: function(value) {
+                                            return formatCurrency(value);
+                                        }
+                                    },
+                                    grid: {
+                                        color: 'rgba(255, 255, 255, 0.1)'
+                                    }
+                                },
+                                x: {
+                                    ticks: {
+                                        color: 'white'
+                                    },
+                                    grid: {
+                                        color: 'rgba(255, 255, 255, 0.1)'
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }, [profile]);
+
+            const getScoreLevel = (score) => {
+                if (score < 30000) return { level: 'Débutant', color: 'from-red-500 to-orange-500', message: 'Focus sur l\'accumulation' };
+                if (score < 100000) return { level: 'Croissance', color: 'from-yellow-500 to-green-500', message: 'Investissements stratégiques' };
+                return { level: 'Maîtrise', color: 'from-green-500 to-blue-500', message: 'Préservation du capital' };
+            };
+
+            const scoreInfo = getScoreLevel(profile.score);
+            const progression = Math.min(100, (profile.score / 200000) * 100);
+
+            return (
+                <div className="glass-card p-8 rounded-3xl">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h2 className="text-3xl font-bold text-white">{profile.nom}</h2>
+                            <p className="text-blue-200">Évaluation Financière Complète</p>
+                        </div>
+                        <button
+                            onClick={onShare}
+                            className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-2xl hover:from-blue-600 hover:to-purple-700 transition-all transform hover:scale-105"
+                        >
+                            <i className="fas fa-share-alt mr-2"></i>
+                            Partager
+                        </button>
+                    </div>
+
+                    {/* Score et progression */}
+                    <div className="mb-8">
+                        <div className="flex items-center justify-between mb-4">
+                            <span className="text-white">Score Global</span>
+                            <span className="text-2xl font-bold text-white">{formatNumber(profile.score)} points</span>
+                        </div>
+                        <div className="w-full bg-white/10 rounded-full h-4">
+                            <div 
+                                className={`h-4 rounded-full bg-gradient-to-r ${scoreInfo.color} transition-all duration-1000`}
+                                style={{ width: `${progression}%` }}
+                            ></div>
+                        </div>
+                        <div className="flex justify-between mt-2">
+                            <span className="text-sm text-blue-200">Niveau: {scoreInfo.level}</span>
+                            <span className="text-sm text-blue-200">{Math.round(progression)}%</span>
+                        </div>
+                    </div>
+
+                    {/* Détails financiers */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                        <FinancialDetail label="Revenus" value={profile.revenus} icon="fas fa-euro-sign" color="text-green-400" />
+                        <FinancialDetail label="Actifs" value={profile.actifs} icon="fas fa-building" color="text-blue-400" />
+                        <FinancialDetail label="Investissements" value={profile.investissements} icon="fas fa-chart-line" color="text-purple-400" />
+                        <FinancialDetail label="Dettes" value={profile.dettes} icon="fas fa-credit-card" color="text-red-400" />
+                    </div>
+
+                    {/* Graphique */}
+                    <div className="mb-8">
+                        <h3 className="text-xl font-bold text-white mb-4">Composition de la Richesse</h3>
+                        <canvas ref={chartRef} width="400" height="200"></canvas>
+                    </div>
+
+                    {/* Conseil stratégique */}
+                    <div className="bg-white/5 p-6 rounded-2xl">
+                        <h3 className="text-xl font-bold text-white mb-3">
+                            <i className="fas fa-lightbulb text-yellow-400 mr-2"></i>
+                            Conseil Stratégique
+                        </h3>
+                        <p className="text-blue-200">
+                            {profile.dettes > profile.revenus 
+                                ? "Priorité #1: Réduction des dettes (consolidez vos crédits)"
+                                : profile.investissements < profile.actifs / 2
+                                ? "Opportunité: Augmentez vos investissements productifs"
+                                : "Stratégie: Diversifiez votre portefeuille d'actifs"
+                            }
+                        </p>
+                    </div>
+                </div>
+            );
+        };
+
+        // Composant Détail Financier
+        const FinancialDetail = ({ label, value, icon, color }) => (
+            <div className="bg-white/5 p-4 rounded-2xl">
+                <div className="flex items-center space-x-2 mb-2">
+                    <i className={`${icon} ${color}`}></i>
+                    <span className="text-white text-sm">{label}</span>
+                </div>
+                <p className="text-xl font-bold text-white">{formatCurrency(value)}</p>
+            </div>
+        );
+
+        // Rendu de l'application
+        ReactDOM.render(<WealthScan />, document.getElementById('root'));
+    </script>
+</body>
+</html>
